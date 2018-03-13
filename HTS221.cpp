@@ -17,13 +17,10 @@ language governing permissions and limitations under the License.
 
 #include "HTS221.h"
 
-
-// ------------------------------------------------------------------------------
-//jmf  -- define I2C pins and functions to read & write to I2C device
-
 #include <string>
 #include "mbed.h"
-#include "hardware.h"
+
+I2C i2c(PTC11, PTC10);         //SDA, SCL -- define the I2C pins being used
 
 // Read a single unsigned char from addressToRead and return it as a unsigned char
 unsigned char HTS221::readRegister(unsigned char slaveAddress, unsigned char ToRead)

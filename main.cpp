@@ -1,19 +1,29 @@
 //#define MQTT_DEBUG
 
+//org=9k09br
+//type=cc
+//id=Mz-1107199-7010
+//auth-method=token
+//auth-token=SecurityToekn99
+//
+
 #include "mbed.h"
 #include "MQTTClient.h"
 #include "MQTTFormat.h"
+#include "MQTTwnc.h"
 
-//#include "MQTTEthernet.h"
-#include "MQTTWNCInterface.h"
-#include "rtos.h"
-#include "k64f.h"
 #include "HTS221.h"
 
-I2C i2c(PTC11, PTC10);         //SDA, SCL -- define the I2C pins being used
-MODSERIAL pc(USBTX,USBRX,256,256);
+#define CTOF(x)  ((x)*1.8+32)
 
-#include "hardware.h"
+typedef enum color {off, red, green, blue} color_t;
+
+//Serial pc(USBTX, USBRX);
+DigitalOut redLED(LED_RED);
+DigitalOut greenLED(LED_GREEN);
+DigitalOut blueLED(LED_BLUE);
+InterruptIn switch2(SW2);
+InterruptIn switch3(SW3);
 
 
 // connect options for MQTT broker
@@ -34,7 +44,7 @@ Queue<uint32_t, 6> messageQ;
 
 struct rcvd_errs{
     int err;
-    char *er;
+    const char *er;
     };
     
 rcvd_errs response[] = {
@@ -57,12 +67,12 @@ rcvd_errs response[] = {
     };
 #define RCMAX   sizeof(response)/sizeof(rcvd_errs)
 
-char * response_str(int rc) {
-    static char *unkown = "Unknown error code...";
-    int i=0;
+const char * response_str(int rc) {
+    static const char *unkown = "Unknown error code...";
+    unsigned int i=0;
     while( response[i].err != rc && i < RCMAX)
         i++;
-    return (i<RCMAX? response[i].er : unkown);
+    return ((i<RCMAX)? response[i].er : unkown);
 }
 
 // LED color control function
@@ -119,102 +129,107 @@ void messageArrived(MQTT::MessageData& md) {
 int main() {
     int rc, qStart=0, txSel=0, good = 0;
     Timer tmr;
-    char* topic = PUBLISH_TOPIC;
-    char clientID[100], buf[100], uniqueID[50];
+    const char* topic = PUBLISH_TOPIC;
+    char clientID[100], buf[100];
+    string st, uniqueID;
 
     HTS221 hts221;
 
-    pc.baud(115200);
+    printf("\r\n");
+    printf("     ** **\r\n");
+    printf("    **   **     Bluemix Quick Start example\r\n");
+    printf("   **     **    using the AT&T IoT Starter Kit\r\n");
+    printf("  ** ===== **   by AVNET\r\n");
+    printf("                   \r\n");
+    printf("\r\n");
+    printf("This demonstration program posts Temp and Humidity data to the IBM\r\n");
+    printf("Quickstart web-site. On the FRDM-K64F board:\n\n");
+    printf("  -> SW2 toggles between Temp and Humidity\n");
+    printf("  -> SW3 toggles enabled sending both Temp & Humity\n");
+    printf("\r\n");
+
     rc = hts221.init();
     if ( rc  ) {
-        pc.printf(BLU "HTS221 Detected (0x%02X)\n\r",rc);
-        pc.printf(HTS221_STR, CTOF(hts221.readTemperature()), hts221.readHumidity()/10);
+        printf("HTS221 Detected (0x%02X)\n\r",rc);
+        printf(HTS221_STR, CTOF(hts221.readTemperature()), hts221.readHumidity()/10);
     }
     else {
-        pc.printf(RED "HTS221 NOT DETECTED!\n\r");
+        printf("HTS221 NOT DETECTED!\n\r");
     }
 
-
-    // turn off LED  
-    controlLED(blue);
+    // turn on LED  
+    controlLED(red);
     
     // set SW2 and SW3 to generate interrupt on falling edge 
     switch2.fall(&sw2_ISR);
     switch3.fall(&sw3_ISR);
 
     // initialize ethernet interface
-    MQTTwnc ipstack = MQTTwnc();
+    MQTTwnc net = MQTTwnc();
     
     // get and display client network info
-    WNCInterface& eth = ipstack.getEth();
+    printf("Connecting using the WNC14A2A\n\n");
+
+    WNC14A2AInterface& eth = net.getEth();
     
     // construct the MQTT client
-    MQTT::Client<MQTTwnc, Countdown> client = MQTT::Client<MQTTwnc, Countdown>(ipstack);
+    MQTT::Client<MQTTwnc, Countdown> client = MQTT::Client<MQTTwnc, Countdown>(net);
     
-    char* hostname = URL;
+    const char* hostname = URL;
     int port = PORT;
-    char *tptr = eth.getMACAddress();
-    strncpy(buf,tptr,strlen(tptr));
-    for( int x=3, i=2; i<strlen(tptr)-2; x+=3,i++ ){
-        buf[i] = buf[x];
-        buf[x]=buf[x+1];
-        }
-    sprintf(uniqueID, "Mz-%s-7010", buf);
-    sprintf(clientID, CONFIGTYPE, uniqueID);
-    printf("ClientID='%s'\r\n",clientID);
+    st = eth.get_mac_address();
+    uniqueID="IoT-";
+    uniqueID += st[0];
+    uniqueID += st[1];
+    uniqueID += st[3];
+    uniqueID += st[4];
+    uniqueID += st[6];
+    uniqueID += st[7];
+    uniqueID += st[9];
+    uniqueID += st[10];
+    uniqueID += "-2016";
+    
+    sprintf(clientID, CONFIGTYPE, uniqueID.c_str());
 
-    printf("      _____\r\n");
-    printf("     *     *\r\n");
-    printf("    *____   *____             Bluemix IIoT Demo using\r\n");
-    printf("   * *===*   *==*             the AT&T IoT Starter Kit\r\n");
-    printf("  *___*===*___**  AVNET\r\n");
-    printf("       *======*\r\n");
-    printf("        *====*\r\n");
-    printf("\r\n");
-    printf("This demonstration program operates the same as the original \r\n");
-    printf("MicroZed IIoT Starter Kit except it only reads from the HTS221 \r\n");
-    printf("temp sensor (no 31855 currently present and no generated data).\r\n");
-    printf("\r\n");
-    printf("Local network info...\r\n");    
-    printf("IP address is %s\r\n", eth.getIPAddress());
-    printf("MAC address is %s\r\n", eth.getMACAddress());
-    printf("Gateway address is %s\r\n", eth.getGateway());
-    printf("Your <uniqueID> is: %s\r\n", uniqueID);
-    printf("---------------------------------------------------------------\r\n");
+    printf("------------------------------------------------------------------------\r\n");
+    printf("Local network info:\r\n");    
+    printf("IP address:         %s\r\n", eth.get_ip_address());
+    printf("MAC address:        %s\r\n", eth.get_mac_address());
+    printf("Gateway address:    %s\r\n", eth.get_gateway());
+    printf("Your <uniqueID> is: %s\r\n", uniqueID.c_str());
+    printf("\r\nTo observe, go to 'https://quickstart.internetofthings.ibmcloud.com/'\r\n");
+    printf("and enter '%s' as your device ID.  Data will then be displayed\r\n",uniqueID.c_str());
+    printf("as it is received. \r\n");
+    printf("------------------------------------------------------------------------\r\n");
 
     MQTTPacket_connectData data = MQTTPacket_connectData_initializer;       
 
     int tries;
     
-    while( !good ) {    
+    while( !good ) {
         tries=0;
-        // connect to TCP socket and check return code
         tmr.start();
         rc = 1;
-        while( rc && tries < 3) {
+        while( rc && tries < 3) {   // connect to TCP socket and check return code
             printf("\r\n\r\n(%d) Attempting TCP connect to %s:%d:  ", tries++, hostname, port);
-            rc = ipstack.connect(hostname, port);
+            rc = net.connect((char*)hostname, port);
             if( rc ) {
                 printf("Failed (%d)!\r\n",rc);
                 while( tmr.read_ms() < 5000 ) ;
                 tmr.reset();
-            }
-            else {
+                }
+            else{
                 printf("Success!\r\n");
                 rc = 0;
+                }
             }
-        }
         if( tries < 3 )
-          tries = 0;
-        else
-          continue;
+            tries = 0;
         
         data.willFlag = 0;  
         data.MQTTVersion = 3;
 
         data.clientID.cstring = clientID;
-    //    data.username.cstring = USERNAME;
-    //    data.password.cstring = PASSWORD;
         data.keepAliveInterval = 10;
         data.cleansession = 1;
     
@@ -227,40 +242,16 @@ int main() {
                 printf("Failed (%d)!\r\n",rc);
                 while( tmr.read_ms() < 5000 );
                 tmr.reset();
-            }
+                }
             else
                 printf("Success!\r\n");
-        }
+            }
 
         if( tries < 3 )
-          tries = 0;
-        else
-          continue;
+            tries = 0;
 
-#if 0
-//Only need to subscribe if we are not running quickstart        
-        // subscribe to MQTT topic
-        tmr.reset();
-        rc = 1;
-        while( rc && client.isConnected() && tries < 3) {
-            printf("(%d) Attempting to subscribing to MQTT topic %s: ", tries, SUBSCRIBTOPIC);
-            rc = client.subscribe(SUBSCRIBTOPIC, MQTT::QOS0, messageArrived);
-            if( rc ) {
-                printf("Failed (%d)!\r\n", rc);
-                while( tmr.read_ms() < 5000 );
-                tries++;
-                tmr.reset();
-            }
-            else {
-                good=1;
-                printf("Subscribe successful!\r\n");
-            }
+        good = 1;
         }
-#else
-    good = 1;
-#endif
-        while (!good);
-    }        
     
     MQTT::Message message;
     message.qos = MQTT::QOS0;
@@ -271,30 +262,38 @@ int main() {
     while(true) {
         osEvent switchEvent = messageQ.get(100);
       
-        if( switchEvent.value.v == 22 )  //switch between sending humidity & temp
-          txSel = !txSel;
+        if( switchEvent.status == osEventMessage && switchEvent.value.v == 22 ) { //switch between sending humidity & temp
+            controlLED(green);
+            txSel = (txSel&1)? txSel&2 : txSel|1;
+            printf("Publishing %s messages.\n", (txSel&1)? "Humid":"Temp");
+            }
           
-        if( switchEvent.value.v == 33)   //user wants to run in Quickstart of Demo mode
-          qStart = !qStart;
+        if( switchEvent.status == osEventMessage && switchEvent.value.v == 33) {  //user wants to run in Quickstart of Demo mode
+            controlLED(blue);
+            txSel = (txSel&2)? txSel&1 : txSel|2;
+            if( txSel & 2 )
+                printf("Publishing both readings.\n");
+            }
                     
-        memset(buf,0x00,sizeof(buf));
-        if( txSel ) {
+        if( txSel & 0x03 ) {
+            memset(buf,0x00,sizeof(buf));
             rc = hts221.readHumidity();
             sprintf(buf, "{\"d\" : {\"humd\" : \"%2d.%d\" }}", rc/10, rc-((rc/10)*10));
-            printf("Publishing MQTT message '%s' ", (char*)message.payload);
+            printf("Publishing MQTT message '%s'\n", (char*)message.payload);
+            message.payloadlen = strlen(buf);
+            rc = client.publish(topic, message);
+            if( rc ) 
+                printf("Publish request failed! (%d)\r\n",rc);
             }
-        else {
-             sprintf(buf, "{\"d\" : {\"temp\" : \"%5.1f\" }}", CTOF(hts221.readTemperature()));
-             printf("Publishing MQTT message '%s' ", (char*)message.payload);
+        if( txSel & 0x02 || !txSel ) {
+            memset(buf,0x00,sizeof(buf));
+            sprintf(buf, "{\"d\" : {\"temp\" : \"%5.1f\" }}", CTOF(hts221.readTemperature()));
+            printf("Publishing MQTT message '%s'\n", (char*)message.payload);
+            message.payloadlen = strlen(buf);
+            rc = client.publish(topic, message);
+            if( rc ) 
+                printf("Publish request failed! (%d)\r\n",rc);
             }
-         message.payloadlen = strlen(buf);
-         printf("(%d)\r\n",message.payloadlen);
-         rc = client.publish(topic, message);
-         if( rc ) {
-             printf("Publish request failed! (%d)\r\n",rc);
-             FATAL_WNC_ERROR(resume);
-             }
-
         client.yield(6000);
-    }           
+    }
 }
