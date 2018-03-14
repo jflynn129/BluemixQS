@@ -1,5 +1,9 @@
 {
     "config": {
+       "mqtt-interface":{
+           "help": "Options are MQTT_ETHERNET, MQTT_WNC14A2A, MQTT_BG96",
+           "value": "MQTT_WNC14A2A"
+       },
        "wnc_debug": {
            "help" : "enable or disable WNC debug messages.",
            "value": 0
@@ -16,3 +20,4 @@
         }
     }
 }
+

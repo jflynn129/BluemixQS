@@ -1,24 +1,19 @@
-//#define MQTT_DEBUG
 
-//org=9k09br
-//type=cc
-//id=Mz-1107199-7010
-//auth-method=token
-//auth-token=SecurityToekn99
-//
+#include <string>
 
 #include "mbed.h"
+#include "HTS221.h"
+#include "EthernetInterface.h"
+#include "WNC14A2AInterface.h"
+
 #include "MQTTClient.h"
 #include "MQTTFormat.h"
-#include "MQTTwnc.h"
-
-#include "HTS221.h"
+#include "MQTT.h"
 
 #define CTOF(x)  ((x)*1.8+32)
 
 typedef enum color {off, red, green, blue} color_t;
 
-//Serial pc(USBTX, USBRX);
 DigitalOut redLED(LED_RED);
 DigitalOut greenLED(LED_GREEN);
 DigitalOut blueLED(LED_BLUE);
@@ -127,7 +122,7 @@ void messageArrived(MQTT::MessageData& md) {
 }
 
 int main() {
-    int rc, qStart=0, txSel=0, good = 0;
+    int rc, txSel=0, good = 0;
     Timer tmr;
     const char* topic = PUBLISH_TOPIC;
     char clientID[100], buf[100];
@@ -163,17 +158,20 @@ int main() {
     // set SW2 and SW3 to generate interrupt on falling edge 
     switch2.fall(&sw2_ISR);
     switch3.fall(&sw3_ISR);
-
-    // initialize ethernet interface
-    MQTTwnc net = MQTTwnc();
     
-    // get and display client network info
+
+    // initialize ethernet interface and construct the MQTT client
+#if   MBED_CONF_APP_MQTT_INTERFACE == MQTT_BG96
+    printf("Connecting using the BG96\n\n");
+#elif MBED_CONF_APP_MQTT_INTERFACE == MQTT_WNC14A2A
     printf("Connecting using the WNC14A2A\n\n");
+#elif MBED_CONF_APP_MQTT_INTERFACE == MQTT_ETHERNET
+    printf("Connecting using the ETHERNET\n\n");
+#endif
 
-    WNC14A2AInterface& eth = net.getEth();
-    
-    // construct the MQTT client
-    MQTT::Client<MQTTwnc, Countdown> client = MQTT::Client<MQTTwnc, Countdown>(net);
+    MQTTct net;
+    MQTTnet& eth = net.getEth();
+    MQTT::Client<MQTTct, Countdown> client = MQTT::Client<MQTTct, Countdown>(net);
     
     const char* hostname = URL;
     int port = PORT;
