@@ -123,7 +123,6 @@ void messageArrived(MQTT::MessageData& md) {
 
 int main() {
     int rc, txSel=0, good = 0;
-    Timer tmr;
     const char* topic = PUBLISH_TOPIC;
     char clientID[100], buf[100];
     string st, uniqueID;
@@ -206,15 +205,13 @@ int main() {
     
     while( !good ) {
         tries=0;
-        tmr.start();
         rc = 1;
         while( rc && tries < 3) {   // connect to TCP socket and check return code
             printf("\r\n\r\n(%d) Attempting TCP connect to %s:%d:  ", tries++, hostname, port);
             rc = net.connect((char*)hostname, port);
             if( rc ) {
                 printf("Failed (%d)!\r\n",rc);
-                while( tmr.read_ms() < 5000 ) ;
-                tmr.reset();
+                wait(5);
                 }
             else{
                 printf("Success!\r\n");
@@ -232,14 +229,12 @@ int main() {
         data.cleansession = 1;
     
         rc = 1;
-        tmr.reset(); 
         while( !client.isConnected() && rc && tries < 3) {
             printf("(%d) Attempting MQTT connect to %s:%d: ", tries++, hostname, port);
             rc = client.connect(data);
             if( rc ) {
                 printf("Failed (%d)!\r\n",rc);
-                while( tmr.read_ms() < 5000 );
-                tmr.reset();
+                wait(5);
                 }
             else
                 printf("Success!\r\n");
@@ -247,7 +242,6 @@ int main() {
 
         if( tries < 3 )
             tries = 0;
-
         good = 1;
         }
     
